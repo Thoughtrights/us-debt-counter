@@ -1,0 +1,16 @@
+# Backups and temporary files written by update_data.py
+*.bak
+*.tmp
+
+# Logs from scheduled runs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# Local editor / assistant settings
+.claude/
+
+# macOS
+.DS_Store

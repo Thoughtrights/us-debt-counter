@@ -1,0 +1,879 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>US Debt Counter</title>
+<meta name="description" content="Live estimate of the US national debt, based on the US Treasury's Debt to the Penny data.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;700&family=Manufacturing+Consent&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,700;1,8..60,400&display=swap">
+<style>
+  /* A broadsheet look: white space, hairline rules, quiet serif headlines. */
+  :root {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --border: #dfdfdf;
+    --text: #121212;
+    --muted: #5a5a5a;
+    --accent: #121212;
+    --line: #326891;
+    --on-accent: #ffffff;
+    --font-body: "Libre Franklin", Helvetica, Arial, sans-serif;
+    --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --font-masthead: "Manufacturing Consent", "Old English Text MT", serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    font-variant-numeric: lining-nums;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
+
+  /* Masthead */
+  header { text-align: center; padding: 4px 0 0; margin-bottom: 22px; border-bottom: 3px double var(--text); }
+  h1 { margin: 0; font-family: var(--font-masthead); font-weight: 400; font-size: clamp(2.1rem, 6.6vw, 4rem); line-height: 1.1; }
+  .sub { color: var(--muted); margin: 6px 0 0; font-family: var(--font-display); font-style: italic; font-size: 0.95rem; }
+  header::after { content: "U.S.   ·   Politics   ·   Business   ·   Economy   ·   The National Debt"; display: block; margin-top: 12px; padding: 8px 0; border-top: 1px solid var(--border); font: 600 0.66rem var(--font-body); letter-spacing: 0.1em; text-transform: uppercase; white-space: pre-wrap; }
+
+  /* Live counter */
+  .counter { background: var(--panel); border-bottom: 1px solid var(--border); padding: 6px 0 30px; text-align: center; }
+  .counter .label { text-transform: uppercase; font-weight: 700; font-size: 0.68rem; letter-spacing: 0.1em; }
+  .amount {
+    font-family: var(--font-display);
+    font-variant-numeric: lining-nums tabular-nums;
+    font-weight: 700;
+    font-size: clamp(1.7rem, 6.8vw, 4.3rem);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    color: var(--accent);
+    margin: 10px 0 6px;
+    word-break: break-all;
+  }
+  /* Fixed-width digits so the ticking number doesn't jitter. */
+  .amount .d { display: inline-block; width: 1ch; text-align: center; }
+  /* Before the first figure arrives the counter holds a sentence, not a number, so set it smaller. */
+  .amount.pending { font-size: clamp(1.15rem, 3.4vw, 1.7rem); font-weight: 400; font-style: italic; letter-spacing: 0; line-height: 1.3; color: var(--muted); word-break: normal; padding: 0.6em 0; }
+  .rate { display: inline-block; color: var(--muted); font-family: var(--font-display); font-style: italic; font-size: 1.02rem; font-variant-numeric: lining-nums tabular-nums; }
+  .fresh { color: var(--muted); font-size: 0.8rem; margin-top: 10px; }
+  .notice { margin-top: 10px; font-size: 0.85rem; color: #a61b1b; }
+  .notice[hidden] { display: none; }
+  .notice button { margin-left: 8px; font: inherit; font-size: 0.78rem; font-weight: 600; color: var(--text); background: var(--panel); border: 1px solid var(--text); border-radius: 3px; padding: 3px 10px; cursor: pointer; }
+
+  .toggle { display: inline-flex; background: var(--panel); border: 1px solid var(--text); border-radius: 3px; padding: 2px; margin-bottom: 18px; }
+  .toggle button { border: 0; background: transparent; color: var(--text); font: inherit; font-size: 0.8rem; font-weight: 600; padding: 6px 16px; border-radius: 3px; cursor: pointer; }
+  .toggle button[aria-selected="true"], .toggle button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+
+  .household { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .household[hidden] { display: none; }
+  .household label { color: var(--muted); font-size: 0.85rem; }
+  .stepper { display: inline-flex; border: 1px solid var(--border); overflow: hidden; }
+  .stepper button { width: 38px; border: 0; background: var(--bg); color: var(--text); font-size: 1.1rem; cursor: pointer; }
+  .stepper input { width: 56px; border: 0; border-left: 1px solid var(--border); border-right: 1px solid var(--border); background: var(--panel); color: var(--text); text-align: center; font: inherit; font-size: 1rem; padding: 6px 0; -moz-appearance: textfield; }
+  .stepper input::-webkit-inner-spin-button, .stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .household .note { color: var(--muted); font-size: 0.78rem; max-width: 520px; }
+
+  /* Summary figures, separated by column rules */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); border-bottom: 1px solid var(--border); }
+  .grid .card { background: var(--panel); border-left: 1px solid var(--border); padding: 18px 18px 20px; }
+  .grid .card:first-child { border-left: 0; padding-left: 0; }
+  .card .k { font-weight: 700; font-size: 0.64rem; letter-spacing: 0.1em; text-transform: uppercase; }
+  .card .v { font-family: var(--font-display); font-size: 1.55rem; font-weight: 700; font-variant-numeric: lining-nums tabular-nums; margin-top: 4px; overflow-wrap: anywhere; }
+  .card .n { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+  @media (max-width: 880px) {
+    .grid .card { border-left: 0; border-top: 1px solid var(--border); padding-left: 0; }
+    .grid .card:first-child { border-top: 0; }
+  }
+
+  /* Sections: the debt chart and who holds the debt */
+  .chart { background: var(--panel); border-bottom: 1px solid var(--border); padding: 22px 0; }
+  .chart-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .chart h2 { font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; line-height: 1.2; margin: 0; }
+  .chart-head .toggle { margin: 0; }
+  .chart-head .toggle button { padding: 4px 12px; }
+  .chart svg { width: 100%; height: 260px; display: block; touch-action: pan-y; }
+  .chart-wrap { position: relative; }
+  .tip { position: absolute; top: 0; pointer-events: none; background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 6px 9px; font-size: 0.78rem; line-height: 1.35; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,0.18); transform: translateX(-50%); z-index: 2; }
+  .tip[hidden] { display: none; }
+  .tip b { font-variant-numeric: lining-nums tabular-nums; }
+  .tip .who { color: var(--muted); }
+  .chart .caption { color: var(--muted); font-size: 0.78rem; margin: 8px 0 0; }
+  .chart .pres { fill: var(--text); font-size: 11px; font-weight: 600; }
+  .chart .delta { fill: var(--accent); font-size: 11px; font-variant-numeric: lining-nums tabular-nums; }
+  .chart .axis { fill: var(--muted); font-size: 11px; }
+
+  /* Who holds the debt */
+  .holders[hidden] { display: none; }
+  .holders .asof { color: var(--muted); font-size: 0.78rem; }
+  .holders h3 { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; margin: 22px 0 6px; }
+  .holders .lede { margin: 0 0 10px; font-family: var(--font-display); font-size: 1rem; }
+  .split-bar { display: flex; height: 30px; border: 1px solid var(--border); overflow: hidden; }
+  .split-bar span { display: block; height: 100%; }
+  .seg-foreign { background: var(--line); }
+  .seg-domestic { background: color-mix(in srgb, var(--text) 42%, transparent); }
+  .seg-gov { background: color-mix(in srgb, var(--text) 16%, transparent); }
+  .split-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px 18px; margin-top: 10px; font-size: 0.84rem; }
+  .split-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 7px; border: 1px solid var(--border); }
+  .split-legend b { font-family: var(--font-display); font-variant-numeric: lining-nums tabular-nums; }
+  .split-legend small { display: block; color: var(--muted); font-size: 0.76rem; margin-left: 19px; }
+  .hrow { display: grid; grid-template-columns: minmax(120px, 170px) 1fr 84px 70px 84px; gap: 12px; align-items: center; padding: 5px 0; border-top: 1px solid color-mix(in srgb, var(--border) 45%, transparent); font-size: 0.86rem; }
+  .hrow.hhead { border-top: 0; color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; padding-bottom: 2px; }
+  .hrow :is(.hamt, .hpct, .hchg) { text-align: right; font-variant-numeric: lining-nums tabular-nums; white-space: nowrap; }
+  .hrow .hamt { font-weight: 600; }
+  .hrow :is(.hpct, .hchg) { color: var(--muted); }
+  .hrow.other .hname { font-style: italic; }
+  .hbar { height: 12px; background: color-mix(in srgb, var(--text) 9%, transparent); }
+  .hbar span { display: block; height: 100%; background: var(--line); }
+  .hrow.other .hbar span { background: color-mix(in srgb, var(--text) 42%, transparent); }
+  @media (max-width: 640px) {
+    .hrow { grid-template-columns: 1fr auto auto; grid-template-areas: "name amt chg" "bar bar bar"; gap: 4px 12px; padding: 7px 0; }
+    .hrow .hname { grid-area: name; } .hrow .hamt { grid-area: amt; } .hrow .hchg { grid-area: chg; min-width: 62px; }
+    .hrow .hbar { grid-area: bar; height: 8px; } .hrow .hpct { display: none; }
+    .hrow.hhead .hbar { display: none; }
+  }
+
+  footer { color: var(--muted); font-size: 0.82rem; margin-top: 24px; text-align: center; }
+  footer a { color: var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>US National Debt Counter</h1>
+    <p class="sub">Live estimate built from the US Treasury's official “Debt to the Penny” data</p>
+  </header>
+
+  <section class="counter" aria-live="off">
+    <div class="toggle" role="tablist" aria-label="Counter view">
+      <button type="button" role="tab" id="modeTotal" aria-selected="true">Total debt</button>
+      <button type="button" role="tab" id="modeShare" aria-selected="false">Your share</button>
+    </div>
+    <div class="label" id="liveLabel">Estimated total public debt right now</div>
+    <div class="amount pending" id="live">Contacting the US Treasury for up to date debt...</div>
+    <div class="rate" id="rate">&nbsp;</div>
+    <div class="fresh" id="fresh">&nbsp;</div>
+    <div class="notice" id="notice" hidden>
+      <span id="noticeText"></span>
+      <button type="button" id="retryNow">Try now</button>
+    </div>
+    <div class="household" id="household" hidden>
+      <label for="people">People in your household</label>
+      <div class="stepper">
+        <button type="button" id="peopleDown" aria-label="Fewer people">−</button>
+        <input id="people" type="number" min="1" max="20" value="1" inputmode="numeric">
+        <button type="button" id="peopleUp" aria-label="More people">+</button>
+      </div>
+      <div class="note" id="shareNote"></div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <div class="k">Official total (Treasury)</div>
+      <div class="v" id="official">—</div>
+      <div class="n" id="officialFull">&nbsp;</div>
+      <div class="n" id="asof">&nbsp;</div>
+    </div>
+    <div class="card">
+      <div class="k">Debt held by the public</div>
+      <div class="v" id="public">—</div>
+      <div class="n" id="publicPct">&nbsp;</div>
+    </div>
+    <div class="card">
+      <div class="k">Intragovernmental holdings</div>
+      <div class="v" id="intragov">—</div>
+      <div class="n" id="intragovPct">&nbsp;</div>
+    </div>
+    <div class="card">
+      <div class="k">Change over past year</div>
+      <div class="v" id="yoy">—</div>
+      <div class="n" id="yoyPct">&nbsp;</div>
+    </div>
+  </section>
+
+  <section class="card chart">
+    <div class="chart-head">
+      <h2 id="chartTitle">Total public debt, past 10 years</h2>
+      <div class="toggle" id="ranges" role="group" aria-label="Chart time range"></div>
+    </div>
+    <div class="chart-wrap">
+      <svg id="chart" viewBox="0 0 800 260" role="img" aria-label="Line chart of the debt over time, with presidential terms shaded"></svg>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+    <p class="caption" id="caption"></p>
+  </section>
+
+  <section class="card chart holders" id="holders" hidden>
+    <div class="chart-head">
+      <h2 id="holdersTitle">Who holds the debt</h2>
+      <span class="asof" id="holdersAsOf"></span>
+    </div>
+    <div class="split-bar" id="splitBar" role="img" aria-label="Share of the debt held by foreign holders, US investors and US government accounts"></div>
+    <div class="split-legend" id="splitLegend"></div>
+    <h3>Foreign holders by country</h3>
+    <p class="lede" id="holdersLede"></p>
+    <div id="hrows"></div>
+    <p class="caption" id="holdersCaption"></p>
+  </section>
+
+  <footer>
+    <p>Sources: <a href="https://fiscaldata.treasury.gov/datasets/debt-to-the-penny/" target="_blank" rel="noopener">U.S. Treasury Fiscal Data — Debt to the Penny</a> (daily, since April 1993) and
+    <a href="https://fiscaldata.treasury.gov/datasets/historical-debt-outstanding/" target="_blank" rel="noopener">Historical Debt Outstanding</a> (yearly, since 1790), and
+    <a href="https://home.treasury.gov/data/treasury-international-capital-tic-system" target="_blank" rel="noopener">Treasury International Capital — Major Foreign Holders</a> (monthly). The ticking number extrapolates from the latest official figure
+    using the average growth rate over the past year, so it is an estimate, not an official value.</p>
+    <p id="status"></p>
+  </footer>
+</main>
+
+<script src="debt.js"></script>
+<script src="holders.js"></script>
+<script>
+(function () {
+  const API = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny";
+  const REFRESH_MS = 60 * 60 * 1000; // re-pull Treasury data hourly
+  const RESPONSE_TIMEOUT_MS = 15 * 1000; // give up if Treasury hasn't started answering by then
+  const DOWNLOAD_TIMEOUT_MS = 60 * 1000; // ...or if the download hasn't finished by then
+  const RETRY_FIRST_MS = 2 * 1000;       // after a failure wait 2s, then 4s, 8s, 16s… (doubling)
+  const RETRY_MAX_MS = 5 * 60 * 1000;    // ...up to 5 minutes between tries
+
+  const $ = (id) => document.getElementById(id);
+  const usd0 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  const usd2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const trillions = (n) => "$" + (n / 1e12).toFixed(3) + "T";
+  const compact = (n) => n >= 1e12 ? "$" + (n / 1e12).toFixed(2) + "T"
+    : n >= 1e9 ? "$" + (n / 1e9).toFixed(2) + "B"
+    : usd0.format(n);
+  const signed = (n, s) => (n >= 0 ? "+" : "−") + s;
+  const dateFmt =new Intl.DateTimeFormat("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
+
+  // Census Bureau's population clock blocks cross-site requests, so use a fixed estimate.
+  // ~343 million: approximate US resident population, late 2026 (Census Bureau projection).
+  const US_POPULATION = 343_000_000;
+
+  let base = null;   // { value, time }
+  let ratePerMs = 0;
+  let ticker = null;
+  const HIST_API = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_outstanding";
+  // Debt to the Penny daily data begins on this date; earlier years come from yearly Historical Debt Outstanding.
+  const DATA_START = "1993-04-01";
+  // Chart windows always end at the latest figure.
+  const RANGES = [10, 20, 30, 40, 50, "all"];
+  // Presidential terms by inauguration (or succession) date.
+  const PRESIDENTS = [
+    ["Washington", "1789-04-30", "1797-03-04"], ["J. Adams", "1797-03-04", "1801-03-04"],
+    ["Jefferson", "1801-03-04", "1809-03-04"], ["Madison", "1809-03-04", "1817-03-04"],
+    ["Monroe", "1817-03-04", "1825-03-04"], ["J.Q. Adams", "1825-03-04", "1829-03-04"],
+    ["Jackson", "1829-03-04", "1837-03-04"], ["Van Buren", "1837-03-04", "1841-03-04"],
+    ["W.H. Harrison", "1841-03-04", "1841-04-04"], ["Tyler", "1841-04-04", "1845-03-04"],
+    ["Polk", "1845-03-04", "1849-03-04"], ["Taylor", "1849-03-04", "1850-07-09"],
+    ["Fillmore", "1850-07-09", "1853-03-04"], ["Pierce", "1853-03-04", "1857-03-04"],
+    ["Buchanan", "1857-03-04", "1861-03-04"], ["Lincoln", "1861-03-04", "1865-04-15"],
+    ["A. Johnson", "1865-04-15", "1869-03-04"], ["Grant", "1869-03-04", "1877-03-04"],
+    ["Hayes", "1877-03-04", "1881-03-04"], ["Garfield", "1881-03-04", "1881-09-19"],
+    ["Arthur", "1881-09-19", "1885-03-04"], ["Cleveland", "1885-03-04", "1889-03-04"],
+    ["B. Harrison", "1889-03-04", "1893-03-04"], ["Cleveland", "1893-03-04", "1897-03-04"],
+    ["McKinley", "1897-03-04", "1901-09-14"], ["T. Roosevelt", "1901-09-14", "1909-03-04"],
+    ["Taft", "1909-03-04", "1913-03-04"], ["Wilson", "1913-03-04", "1921-03-04"],
+    ["Harding", "1921-03-04", "1923-08-02"], ["Coolidge", "1923-08-02", "1929-03-04"],
+    ["Hoover", "1929-03-04", "1933-03-04"], ["F. Roosevelt", "1933-03-04", "1945-04-12"],
+    ["Truman", "1945-04-12", "1953-01-20"], ["Eisenhower", "1953-01-20", "1961-01-20"],
+    ["Kennedy", "1961-01-20", "1963-11-22"], ["L. Johnson", "1963-11-22", "1969-01-20"],
+    ["Nixon", "1969-01-20", "1974-08-09"], ["Ford", "1974-08-09", "1977-01-20"],
+    ["Carter", "1977-01-20", "1981-01-20"], ["Reagan", "1981-01-20", "1989-01-20"],
+    ["G.H.W. Bush", "1989-01-20", "1993-01-20"], ["Clinton", "1993-01-20", "2001-01-20"],
+    ["G.W. Bush", "2001-01-20", "2009-01-20"], ["Obama", "2009-01-20", "2017-01-20"],
+    ["Trump", "2017-01-20", "2021-01-20"], ["Biden", "2021-01-20", "2025-01-20"],
+    ["Trump", "2025-01-20", null],
+  ].map(([name, start, end]) => ({ name, start, end }));
+  let annualRows = null; // yearly figures before DATA_START, from the saved copy or fetched once
+  let snapshot = null;   // validated saved figures from debt.js, or null if that file is missing or damaged
+  let dataSource = "none"; // where the figures on screen came from: "saved" (debt.js) or "live" (Treasury)
+  const OVERLAP_DAYS = 45; // with saved figures on hand, re-fetch only this recent stretch from Treasury
+
+  const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+  const esc = (str) => String(str).replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
+
+  // Saved debt figures (debt.js, written by update_data.py). The page starts from them so there is
+  // something to show at once, and falls back to them when Treasury is slow or unreachable.
+  // A missing, empty or damaged file returns null and the page works from live data alone.
+  function readSnapshot() {
+    try {
+      const S = window.DEBT_SNAPSHOT;
+      if (!S || !Array.isArray(S.daily) || S.daily.length < 300) return null;
+      const amount = (v) => typeof v === "number" && isFinite(v) && v > 0;
+      const daily = [];
+      for (const r of S.daily) {
+        // One bad row means the file can't be trusted, so ignore all of it.
+        if (!Array.isArray(r) || !ISO_DAY.test(r[0]) || !amount(r[1])) return null;
+        if (daily.length && r[0] <= daily[daily.length - 1].date) return null;
+        daily.push({ date: r[0], t: recordTime(r[0]), total: r[1], pub: amount(r[2]) ? r[2] : NaN, intra: amount(r[3]) ? r[3] : NaN });
+      }
+      const last = daily[daily.length - 1];
+      if (!isFinite(last.t) || last.t > Date.now() + 2 * 864e5 || !isFinite(last.pub) || !isFinite(last.intra)) return null;
+      // The yearly history is optional: if it is damaged, it is fetched live instead.
+      let yearly = [];
+      if (Array.isArray(S.yearly)) {
+        for (const r of S.yearly) {
+          if (!Array.isArray(r) || !ISO_DAY.test(r[0]) || !amount(r[1]) || r[0] >= DATA_START ||
+              (yearly.length && r[0] <= yearly[yearly.length - 1].date)) { yearly = []; break; }
+          yearly.push({ date: r[0], t: recordTime(r[0]), total: r[1], annual: true });
+        }
+      }
+      return { daily, yearly };
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  }
+
+  // Foreign holders table (holders.js). Returns null unless it is complete and well formed,
+  // in which case the "Who holds the debt" section simply stays hidden.
+  function readHolders() {
+    try {
+      const H = window.FOREIGN_HOLDERS;
+      if (!H || !Array.isArray(H.months) || !H.months.length || !Array.isArray(H.countries) || !H.countries.length) return null;
+      const n = H.months.length;
+      const series = (v, positive) => Array.isArray(v) && v.length === n &&
+        v.every((x) => typeof x === "number" && isFinite(x) && x >= 0 && (!positive || x > 0));
+      if (!H.months.every((m) => /^\d{4}-(0[1-9]|1[0-2])$/.test(m))) return null;
+      if (!series(H.grandTotal, true) || !series(H.allOther, false)) return null;
+      if (!H.countries.every((c) => c && typeof c.name === "string" && c.name && series(c.values, false))) return null;
+      return {
+        months: H.months, countries: H.countries, allOther: H.allOther, grandTotal: H.grandTotal,
+        foreignOfficial: series(H.foreignOfficial, true) ? H.foreignOfficial : null,
+        retrieved: ISO_DAY.test(H.retrieved) ? H.retrieved : null,
+      };
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  }
+  const holdersData = readHolders();
+  let geo = null;        // current chart geometry, for the hover readout
+  let allRows = [];
+  let mode = "total";
+  let people = 1;
+  let rangeYears = RANGES[0];
+
+  try {
+    const saved = JSON.parse(localStorage.getItem("debtCounterPrefs") || "{}");
+    if (saved.mode === "share") mode = "share";
+    if (saved.people >= 1 && saved.people <= 20) people = saved.people;
+    if (RANGES.includes(saved.rangeYears)) rangeYears = saved.rangeYears;
+  } catch (e) { /* storage unavailable: use defaults */ }
+  function savePrefs() {
+    try { localStorage.setItem("debtCounterPrefs", JSON.stringify({ mode, people, rangeYears })); } catch (e) {}
+  }
+
+  function shareFactor() { return mode === "share" ? people / US_POPULATION : 1; }
+
+  function updateRate() {
+    if (!base) return;
+    const f = shareFactor();
+    const perSec = ratePerMs * 1000 * f;
+    const perDay = ratePerMs * 864e5 * f;
+    if (mode === "share") {
+      $("rate").textContent = signed(perDay, usd2.format(Math.abs(perDay))) + " per day · " +
+        signed(perDay * 365, usd2.format(Math.abs(perDay * 365))) + " per year";
+    } else {
+      $("rate").textContent = signed(perSec, usd0.format(Math.abs(perSec))) + " per second · " +
+        signed(perDay, compact(Math.abs(perDay))) + " per day";
+    }
+  }
+
+  function applyMode() {
+    const share = mode === "share";
+    $("modeTotal").setAttribute("aria-selected", String(!share));
+    $("modeShare").setAttribute("aria-selected", String(share));
+    $("household").hidden = !share;
+    $("people").value = people;
+    $("liveLabel").textContent = share
+      ? (people === 1 ? "Your share of the national debt" : "Your household's share of the national debt")
+      : "Estimated total public debt right now";
+    $("shareNote").textContent = "Total public debt divided by about " + (US_POPULATION / 1e6).toFixed(0) +
+      " million US residents (Census Bureau estimate), times " + people + (people === 1 ? " person." : " people.");
+    $("chartTitle").textContent = (share
+      ? (people === 1 ? "Your share" : "Your household's share") + " of the debt"
+      : "Total public debt") + (rangeYears === "all"
+        ? (allRows.length ? " since " + new Date(allRows[0].t).getUTCFullYear() : ", all years")
+        : ", past " + rangeYears + " years");
+    [...$("ranges").children].forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.years === String(rangeYears))));
+    updateRate();
+    drawChart();
+    try { renderHolders(); } catch (err) { console.error(err); $("holders").hidden = true; }
+    savePrefs();
+  }
+
+  // ----- Who holds the debt: foreign holders by country (monthly Treasury TIC table in holders.js) -----
+  const COUNTRY_NAMES = { "China, Mainland": "China (mainland)", "Korea, South": "South Korea" };
+  function renderHolders() {
+    const H = holdersData;
+    if (!H || allRows.length < 2) return;
+    const [y, m] = H.months[0].split("-").map(Number);
+    const monthEnd = Date.UTC(y, m, 0, 23, 59); // last day of the reporting month
+    // Compare against the debt on that same day, not today's.
+    let debtRow = null;
+    for (let i = allRows.length - 1; i >= 0; i--) {
+      if (allRows[i].t <= monthEnd && isFinite(allRows[i].intra)) { debtRow = allRows[i]; break; }
+    }
+    if (!debtRow) return;
+
+    const share = mode === "share", f = shareFactor(), B = 1e9;
+    const money = (v) => share ? usd0.format(v * f)
+      : v >= 1e12 ? "$" + (v / 1e12).toFixed(2) + "T" : "$" + Math.round(v / 1e9).toLocaleString("en-US") + "B";
+    const pct = (v) => (v / debtRow.total * 100).toFixed(1) + "%";
+    const monthName = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
+      .format(new Date(Date.UTC(y, m - 1, 15)));
+
+    const foreign = H.grandTotal[0] * B, gov = debtRow.intra, domestic = debtRow.total - foreign - gov;
+    const segs = [
+      ["seg-foreign", "Foreign holders", "Governments, central banks and investors abroad", foreign],
+      ["seg-domestic", "US investors and the Federal Reserve", "Funds, banks, pensions, households, the Fed", domestic],
+      ["seg-gov", "US government accounts", "Trust funds such as Social Security", gov],
+    ];
+    $("holdersTitle").textContent = share
+      ? "Who holds " + (people === 1 ? "your share" : "your household's share") + " of the debt"
+      : "Who holds the debt";
+    $("holdersAsOf").textContent = "Holdings at the end of " + monthName;
+    $("splitBar").innerHTML = segs.map(([cls, label, , v]) =>
+      `<span class="${cls}" style="width:${(v / debtRow.total * 100).toFixed(2)}%" title="${label}: ${pct(v)}"></span>`).join("");
+    $("splitLegend").innerHTML = segs.map(([cls, label, note, v]) =>
+      `<div><i class="${cls}"></i>${label}: <b>${money(v)}</b> (${pct(v)})<small>${note}</small></div>`).join("");
+
+    const last = H.months.length - 1; // oldest month in the table (12 months back)
+    const rows = H.countries.map((c) => ({ name: COUNTRY_NAMES[c.name] || c.name, v: c.values[0], old: c.values[last] }))
+      .sort((a, b) => b.v - a.v);
+    rows.push({ name: "All other countries", v: H.allOther[0], old: H.allOther[last], other: true });
+    const max = Math.max(...rows.map((r) => r.v));
+    const change = (r) => {
+      if (!(r.old > 0)) return "";
+      const c = (r.v - r.old) / r.old * 100;
+      return (c >= 0 ? "▲ " : "▼ ") + Math.abs(c).toFixed(1) + "%";
+    };
+    $("hrows").innerHTML =
+      `<div class="hrow hhead"><span class="hname">Country</span><span class="hbar" style="background:none"></span>` +
+      `<span class="hamt">${share ? "Your share" : "Holdings"}</span><span class="hpct">% of debt</span><span class="hchg">1-yr change</span></div>` +
+      rows.map((r) =>
+        `<div class="hrow${r.other ? " other" : ""}"><span class="hname">${esc(r.name)}</span>` +
+        `<span class="hbar"><span style="width:${(r.v / max * 100).toFixed(1)}%"></span></span>` +
+        `<span class="hamt">${money(r.v * B)}</span><span class="hpct">${pct(r.v * B)}</span><span class="hchg">${change(r)}</span></div>`).join("");
+
+    $("holdersLede").textContent = "";
+    if (H.foreignOfficial) {
+      const official = H.foreignOfficial[0] * B;
+      $("holdersLede").textContent = "Foreign governments and central banks hold " + money(official) +
+        " of the foreign total; private investors abroad hold the other " + money(foreign - official) + ".";
+    }
+    $("holdersCaption").textContent = "Source: US Treasury, Major Foreign Holders of Treasury Securities" +
+      (H.retrieved ? ", retrieved " + dateFmt.format(new Date(H.retrieved + "T12:00:00Z")) : "") + ". Treasury updates the table monthly, about six weeks after month end. " +
+      "Countries are where the securities are held in custody, which is not always who ultimately owns them, so financial centers " +
+      "such as Belgium, Luxembourg, Ireland and the Cayman Islands look larger than their own investors' holdings. " +
+      "Percentages are of the " + (share ? "" : "$" + (debtRow.total / 1e12).toFixed(2) + "T ") + "total debt on " + dateFmt.format(new Date(debtRow.t)) + ".";
+    $("holders").hidden = false;
+  }
+
+  function setPeople(n) {
+    people = Math.min(20, Math.max(1, Math.round(Number(n)) || 1));
+    applyMode();
+  }
+
+  $("modeTotal").addEventListener("click", () => { mode = "total"; applyMode(); });
+  $("modeShare").addEventListener("click", () => { mode = "share"; applyMode(); });
+  $("peopleDown").addEventListener("click", () => setPeople(people - 1));
+  $("peopleUp").addEventListener("click", () => setPeople(people + 1));
+  $("people").addEventListener("change", (e) => setPeople(e.target.value));
+  RANGES.forEach((y) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.years = y;
+    b.textContent = y === "all" ? "All" : y + "Y";
+    b.setAttribute("aria-label", y === "all" ? "All years since 1790" : "Past " + y + " years");
+    b.addEventListener("click", () => { rangeYears = y; applyMode(); });
+    $("ranges").appendChild(b);
+  });
+  applyMode();
+
+  function isoDaysAgo(days) {
+    const d = new Date(Date.now() - days * 864e5);
+    return d.toISOString().slice(0, 10);
+  }
+
+  // Treasury figures are as of close of business; treat that as ~5pm US Eastern (22:00 UTC).
+  function recordTime(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return Date.UTC(y, m - 1, d, 22, 0, 0);
+  }
+
+  // Fetch every page of a Fiscal Data query (the API caps pages at 10,000 rows).
+  // Fetch JSON, aborting if the server is slow to answer or the download drags on.
+  async function fetchJson(url) {
+    const ctrl = new AbortController();
+    let timedOut = "";
+    let timer = setTimeout(() => { timedOut = "did not respond within " + RESPONSE_TIMEOUT_MS / 1000 + " seconds"; ctrl.abort(); }, RESPONSE_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error("The US Treasury returned an error (" + res.status + ")");
+      timer = setTimeout(() => { timedOut = "took longer than " + DOWNLOAD_TIMEOUT_MS / 1000 + " seconds to send its data"; ctrl.abort(); }, DOWNLOAD_TIMEOUT_MS);
+      return await res.json();
+    } catch (err) {
+      if (timedOut) throw new Error("The US Treasury " + timedOut);
+      if (err instanceof TypeError) throw new Error("Could not reach the US Treasury"); // network failure
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function fetchAll(url, params) {
+    let out = [], page = 1, pages = 1;
+    do {
+      const q = new URLSearchParams({ ...params, "page[size]": "10000", "page[number]": String(page) });
+      const json = await fetchJson(url + "?" + q.toString());
+      out = out.concat(json.data);
+      pages = json.meta["total-pages"] || 1;
+      page++;
+    } while (page <= pages);
+    return out;
+  }
+
+  async function load() {
+    $("status").textContent = "Checking US Treasury for new data…";
+    const annualP = annualRows ? Promise.resolve(annualRows) : fetchAll(HIST_API, {
+      fields: "record_date,debt_outstanding_amt",
+      filter: "record_date:lt:" + DATA_START,
+      sort: "record_date",
+    }).then((data) => (annualRows = data.map((r) => ({
+      date: r.record_date, t: recordTime(r.record_date), total: parseFloat(r.debt_outstanding_amt), annual: true,
+    })).filter((r) => isFinite(r.total)))).catch((err) => { console.error(err); return []; });
+
+    // With saved figures on hand, ask Treasury only for the recent stretch and merge it in.
+    // Without them, fetch the whole daily history.
+    let since = DATA_START;
+    if (snapshot) {
+      const lastSaved = snapshot.daily[snapshot.daily.length - 1];
+      since = new Date(lastSaved.t - OVERLAP_DAYS * 864e5).toISOString().slice(0, 10);
+    }
+    const live = (await fetchAll(API, {
+      fields: "record_date,tot_pub_debt_out_amt,debt_held_public_amt,intragov_hold_amt",
+      filter: "record_date:gte:" + since,
+      sort: "record_date",
+    })).filter((r) => r && ISO_DAY.test(r.record_date)).map((r) => ({
+      date: r.record_date,
+      t: recordTime(r.record_date),
+      total: parseFloat(r.tot_pub_debt_out_amt),
+      pub: parseFloat(r.debt_held_public_amt),
+      intra: parseFloat(r.intragov_hold_amt),
+    })).filter((r) => isFinite(r.t) && isFinite(r.total) && r.total > 0);
+    if (!live.length) throw new Error("The US Treasury sent no usable figures");
+
+    const byDate = new Map();
+    if (snapshot) snapshot.daily.forEach((r) => byDate.set(r.date, r));
+    live.forEach((r) => byDate.set(r.date, r)); // live figures win where the two overlap
+    const rows = [...byDate.values()].sort((x, y) => x.t - y.t);
+    const latest = rows[rows.length - 1];
+    if (rows.length < 2) throw new Error("The US Treasury sent too few figures");
+    if (!isFinite(latest.pub) || !isFinite(latest.intra)) throw new Error("The US Treasury's latest figure is incomplete");
+    // Don't let a garbled response replace good figures: allow 15%, plus 15% per year since the figures on screen.
+    if (base) {
+      const years = Math.abs(latest.t - base.time) / (365.25 * 864e5);
+      if (Math.abs(latest.total / base.value - 1) > 0.15 + 0.15 * years) {
+        throw new Error("The US Treasury sent figures that don't match the earlier ones");
+      }
+    }
+
+    allRows = (await annualP).concat(rows);
+    dataSource = "live";
+    render(rows);
+    const retrieved = new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+    $("fresh").textContent = "Latest Treasury figure: " + dateFmt.format(new Date(rows[rows.length - 1].t)) +
+      " · Last retrieved from US Treasury: " + retrieved;
+    $("status").textContent = "Treasury usually posts each day's figure about one business day later; this page re-checks every hour." +
+      (annualRows && annualRows.length ? "" : " (Yearly history before 1993 could not be loaded.)");
+  }
+
+  function render(rows) {
+    const latest = rows[rows.length - 1];
+    // Earliest row at least ~365 days before the latest, for a smooth annual growth rate.
+    const target = latest.t - 365 * 864e5;
+    const yearAgo = rows.find((r) => r.t >= target) || rows[0];
+
+    ratePerMs = (latest.total - yearAgo.total) / (latest.t - yearAgo.t);
+    base = { value: latest.total, time: latest.t };
+
+    $("official").textContent = trillions(latest.total);
+    $("officialFull").textContent = usd2.format(latest.total);
+    $("asof").textContent = "As of " + dateFmt.format(new Date(latest.t));
+    $("public").textContent = trillions(latest.pub);
+    $("publicPct").textContent = ((latest.pub / latest.total) * 100).toFixed(1) + "% of total";
+    $("intragov").textContent = trillions(latest.intra);
+    $("intragovPct").textContent = ((latest.intra / latest.total) * 100).toFixed(1) + "% of total";
+
+    const change = latest.total - yearAgo.total;
+    $("yoy").textContent = signed(change, compact(Math.abs(change)));
+    $("yoyPct").textContent = (change >= 0 ? "+" : "") + ((change / yearAgo.total) * 100).toFixed(2) +
+      "% since " + dateFmt.format(new Date(yearAgo.t));
+
+    updateRate();
+
+    applyMode(); // refresh titles (e.g. "since 1790") and redraw the chart
+    if (!ticker) ticker = requestAnimationFrame(tick);
+  }
+
+  // Render the counter one character per span (digits fixed-width), touching only what changed.
+  let liveChars = [];
+  function setLive(str) {
+    const el = $("live");
+    el.classList.remove("pending");
+    if (liveChars.length !== str.length || el.childElementCount !== str.length) {
+      el.textContent = "";
+      liveChars = [...str].map((c) => {
+        const sp = document.createElement("span");
+        if (c >= "0" && c <= "9") sp.className = "d";
+        sp.textContent = c;
+        el.appendChild(sp);
+        return sp;
+      });
+      return;
+    }
+    for (let i = 0; i < str.length; i++) {
+      if (liveChars[i].textContent !== str[i]) {
+        liveChars[i].textContent = str[i];
+        liveChars[i].className = str[i] >= "0" && str[i] <= "9" ? "d" : "";
+      }
+    }
+  }
+
+  function tick() {
+    if (base) {
+      const now = Date.now();
+      const est = base.value + ratePerMs * (now - base.time);
+      setLive(mode === "share" ? usd2.format(est * shareFactor()) : usd0.format(est));
+    }
+    ticker = requestAnimationFrame(tick);
+  }
+
+  // Debt at time t, linearly interpolated between the surrounding Treasury figures.
+  function valueAt(rows, t) {
+    let lo = 0, hi = rows.length - 1;
+    if (t <= rows[0].t) return rows[0].total;
+    if (t >= rows[hi].t) return rows[hi].total;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (rows[mid].t <= t) lo = mid; else hi = mid; }
+    const a = rows[lo], b = rows[hi];
+    return a.total + (b.total - a.total) * (t - a.t) / (b.t - a.t);
+  }
+
+  function presidentAt(t) {
+    return PRESIDENTS.find((p) => recordTime(p.start) <= t && (!p.end || t < recordTime(p.end)));
+  }
+
+  function drawChart() {
+    if (allRows.length < 2) return;
+    $("tip").hidden = true; // any open readout belongs to the previous drawing
+    let startT = allRows[0].t;
+    if (rangeYears !== "all") {
+      const d = new Date(allRows[allRows.length - 1].t);
+      d.setUTCFullYear(d.getUTCFullYear() - rangeYears);
+      startT = Math.max(startT, d.getTime());
+    }
+    const rows = allRows.filter((r) => r.t >= startT);
+    if (rows.length < 2) return;
+    const svg = $("chart");
+    const f = shareFactor();
+    const share = mode === "share";
+    const W = Math.max(280, Math.round(svg.clientWidth || 800)), H = 260, padL = 48, padR = 8, padT = 36, padB = 22;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    const x0 = rows[0].t, x1 = rows[rows.length - 1].t;
+    const yMaxRaw = Math.max(...rows.map((r) => r.total * f));
+    const dailyStart = recordTime(DATA_START);
+
+    // Y axis starts at zero, with "nice" round tick steps.
+    const rawStep = yMaxRaw / 5;
+    const pow = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const m = rawStep / pow;
+    const yStep = (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * pow;
+    const yMax = Math.ceil(yMaxRaw / yStep) * yStep;
+    const yLabel = (v) => v === 0 ? "$0" : share ? "$" + +(v / 1e3).toFixed(1) + "K" : "$" + +(v / 1e12).toFixed(1) + "T";
+    const money = (v) => share
+      ? (Math.abs(v) >= 1e3 ? "$" + (Math.abs(v) / 1e3).toFixed(1) + "K" : usd0.format(Math.abs(v)))
+      : (Math.abs(v) >= 1e12 ? "$" + (Math.abs(v) / 1e12).toFixed(1) + "T"
+        : Math.abs(v) >= 1e9 ? "$" + (Math.abs(v) / 1e9).toFixed(0) + "B"
+        : "$" + (Math.abs(v) / 1e6).toFixed(0) + "M");
+    const textW = (str, px) => str.length * px + 6; // rough label width at 11px
+
+    const X = (t) => padL + ((t - x0) / (x1 - x0 || 1)) * (W - padL - padR);
+    const Y = (v) => padT + (1 - v / yMax) * (H - padT - padB);
+    const baseY = H - padB;
+
+    const pxPerYear = (W - padL - padR) / ((x1 - x0) / (365.25 * 864e5));
+    let out = "";
+
+    // Presidential term bands, labeled when there's room with the change in debt during the term.
+    let hasEstimate = false;
+    PRESIDENTS.forEach((p, idx) => {
+      const ps = recordTime(p.start), pe = p.end ? recordTime(p.end) : Infinity;
+      const bs = Math.max(x0, ps), be = Math.min(x1, pe);
+      if (be <= bs) return;
+      const xa = X(bs), xb = X(be), w = xb - xa, mid = (xa + xb) / 2;
+      out += `<rect x="${xa.toFixed(1)}" y="${padT - 30}" width="${w.toFixed(1)}" height="${baseY - padT + 30}" fill="var(--text)" opacity="${idx % 2 ? 0.07 : 0.03}"></rect>`;
+      if (bs > x0 && pxPerYear >= 6) { // skip dividers when terms are packed tightly (e.g. "All")
+        out += `<line x1="${xa.toFixed(1)}" x2="${xa.toFixed(1)}" y1="${padT - 30}" y2="${baseY}" stroke="var(--muted)" stroke-dasharray="3 3" stroke-width="1" opacity="0.7"></line>`;
+      }
+      const named = w >= textW(p.name, 6.6);
+      if (named) out += `<text class="pres" x="${mid.toFixed(1)}" y="${padT - 18}" text-anchor="middle">${p.name}</text>`;
+      // Only label the change for named terms that start inside the chart.
+      if (named && bs === ps) {
+        const approx = bs < dailyStart;
+        const delta = (valueAt(rows, be) - valueAt(rows, bs)) * f;
+        let label = (approx ? "≈" : "") + (delta >= 0 ? "+" : "−") + money(delta);
+        if (!p.end && w >= textW(label + " so far", 6)) label += " so far";
+        if (w >= textW(label, 6)) {
+          out += `<text class="delta" x="${mid.toFixed(1)}" y="${padT - 4}" text-anchor="middle">${label}</text>`;
+          if (approx) hasEstimate = true;
+        }
+      }
+    });
+
+    // Horizontal gridlines and Y labels.
+    for (let v = 0; v <= yMax + 1e-6; v += yStep) {
+      const y = Y(v).toFixed(1);
+      out += `<line x1="${padL}" x2="${W - padR}" y1="${y}" y2="${y}" stroke="var(--border)" stroke-width="1"></line>`;
+      out += `<text class="axis" x="${padL - 6}" y="${(+y + 4).toFixed(1)}" text-anchor="end">${yLabel(v)}</text>`;
+    }
+
+    // Ticks on Jan 1, spaced so labels stay at least ~44px apart.
+    const yearStep = [1, 2, 5, 10, 20, 25, 50, 100].find((st) => st * pxPerYear >= 44) || 100;
+    for (let yr = new Date(x0).getUTCFullYear() + 1; Date.UTC(yr, 0, 1) <= x1; yr++) {
+      if ((yr % yearStep) !== 0) continue;
+      const x = X(Date.UTC(yr, 0, 1)).toFixed(1);
+      out += `<line x1="${x}" x2="${x}" y1="${baseY}" y2="${baseY + 4}" stroke="var(--muted)" stroke-width="1"></line>`;
+      out += `<text class="axis" x="${x}" y="${H - 4}" text-anchor="middle">${yr}</text>`;
+    }
+
+    const pts = rows.map((r) => X(r.t).toFixed(1) + "," + Y(r.total * f).toFixed(1)).join(" ");
+    const area = `${X(x0).toFixed(1)},${baseY} ${pts} ${X(x1).toFixed(1)},${baseY}`;
+    out += `<polygon points="${area}" fill="var(--line)" opacity="0.15"></polygon>
+      <polyline points="${pts}" fill="none" stroke="var(--line)" stroke-width="2" stroke-linejoin="round"></polyline>
+      <g id="hover" style="display:none">
+        <line id="hoverLine" y1="${padT - 30}" y2="${baseY}" stroke="var(--muted)" stroke-width="1"></line>
+        <circle id="hoverDot" r="4" fill="var(--line)" stroke="var(--panel)" stroke-width="2"></circle>
+      </g>`;
+    svg.innerHTML = out;
+    geo = { rows, X, Y, x0, x1, W, padL, padR, f, share };
+
+    // Caption explains what the bands, numbers and yearly data mean for this view.
+    let cap = "Shaded bands mark presidential terms. Red figures show how much the debt changed during each term " +
+      "(the current term is through the latest Treasury figure). Hover or tap the chart for details.";
+    if (x0 < dailyStart) {
+      cap += " Before April 1993, Treasury reports one figure per fiscal year, so that part of the line is smoother" +
+        (hasEstimate ? " and changes marked ≈ are estimated between those yearly figures." : ".");
+    }
+    if (share) cap += " Your share divides every year's debt by today's population, so earlier years understate what each person's share was at the time.";
+    $("caption").textContent = cap;
+  }
+
+  // Hover / touch readout: date, amount and president at the nearest data point.
+  const shortDate = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
+  function showTip(e) {
+    if (!geo) return;
+    const svg = $("chart"), rect = svg.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (geo.W / rect.width);
+    const frac = Math.min(1, Math.max(0, (px - geo.padL) / (geo.W - geo.padL - geo.padR)));
+    const t = geo.x0 + frac * (geo.x1 - geo.x0);
+    const rows = geo.rows;
+    let lo = 0, hi = rows.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (rows[mid].t <= t) lo = mid; else hi = mid; }
+    const r = (t - rows[lo].t < rows[hi].t - t) ? rows[lo] : rows[hi];
+    const x = geo.X(r.t), y = geo.Y(r.total * geo.f);
+    $("hover").style.display = "";
+    $("hoverLine").setAttribute("x1", x); $("hoverLine").setAttribute("x2", x);
+    $("hoverDot").setAttribute("cx", x); $("hoverDot").setAttribute("cy", y);
+    const p = presidentAt(r.t);
+    const amount = geo.share ? usd0.format(r.total * geo.f) + (people === 1 ? " per person" : " per household") : compact(r.total);
+    $("tip").innerHTML = `${shortDate.format(new Date(r.t))}${r.annual ? " (yearly figure)" : ""}<br><b>${amount}</b>` +
+      (p ? `<br><span class="who">President: ${p.name}</span>` : "");
+    const tip = $("tip");
+    tip.hidden = false;
+    const cssX = x * (rect.width / geo.W), half = tip.offsetWidth / 2;
+    tip.style.left = Math.min(rect.width - half, Math.max(half, cssX)) + "px";
+    tip.style.top = Math.max(0, y * (rect.height / 260) - tip.offsetHeight - 12) + "px";
+  }
+  function hideTip() { $("tip").hidden = true; const h = $("hover"); if (h) h.style.display = "none"; }
+  $("chart").addEventListener("pointermove", showTip);
+  $("chart").addEventListener("pointerdown", showTip);
+  $("chart").addEventListener("pointerleave", hideTip);
+
+  // ----- Loading, failure and retry -----
+  const PENDING_TEXT = $("live").textContent; // "Contacting the US Treasury…", as written in the page
+  let loading = false, retryDelay = RETRY_FIRST_MS, retryTimer = null, countdownTimer = null;
+
+  function run() {
+    if (loading) return;
+    loading = true;
+    clearTimeout(retryTimer);
+    clearInterval(countdownTimer);
+    $("notice").hidden = true;
+    if (!base) $("live").textContent = PENDING_TEXT;
+    if (dataSource === "saved") savedLabel(true);
+    load().then(() => {
+      retryDelay = RETRY_FIRST_MS; // success: the next failure starts again from the shortest wait
+    }).catch((err) => {
+      console.error(err);
+      scheduleRetry(err);
+    }).finally(() => { loading = false; });
+  }
+
+  // After a failure, try again automatically, doubling the wait each time.
+  function scheduleRetry(err) {
+    const wait = retryDelay;
+    retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
+    const until = Date.now() + wait;
+    const reason = err && err.message ? err.message : "Could not load Treasury data";
+    if (!base) $("live").textContent = reason + ".";
+    const tick = () => {
+      const secs = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+      const when = secs >= 90 ? "in about " + Math.round(secs / 60) + " minutes" : "in " + secs + (secs === 1 ? " second" : " seconds");
+      $("noticeText").textContent = (base ? reason + (dataSource === "saved" ? "; showing saved figures. " : "; showing the last figures received. ") : "") + "Trying again " + when + "…";
+    };
+    tick();
+    if (dataSource === "saved") savedLabel(false);
+    $("notice").hidden = false;
+    $("status").textContent = "";
+    countdownTimer = setInterval(tick, 1000);
+    retryTimer = setTimeout(run, wait);
+  }
+  $("retryNow").addEventListener("click", run);
+
+  // Says plainly when the figures on screen are the saved copy rather than fresh from Treasury.
+  function savedLabel(checking) {
+    const last = snapshot.daily[snapshot.daily.length - 1];
+    $("fresh").textContent = "Showing saved figures from " + dateFmt.format(new Date(last.t)) +
+      (checking ? " while checking the US Treasury for newer ones…" : ".");
+  }
+
+  // Start from the saved figures if there are good ones, then go to Treasury for the latest.
+  snapshot = readSnapshot();
+  if (snapshot) {
+    try {
+      if (snapshot.yearly.length) annualRows = snapshot.yearly;
+      allRows = snapshot.yearly.concat(snapshot.daily);
+      dataSource = "saved";
+      render(snapshot.daily);
+    } catch (err) { // never let the saved copy stop the page: carry on with live data only
+      console.error(err);
+      snapshot = null; base = null; annualRows = null; allRows = []; dataSource = "none";
+      $("live").className = "amount pending";
+    }
+  }
+
+  run();
+  setInterval(run, REFRESH_MS);
+  window.addEventListener("resize", drawChart);
+})();
+</script>
+</body>
+</html>
